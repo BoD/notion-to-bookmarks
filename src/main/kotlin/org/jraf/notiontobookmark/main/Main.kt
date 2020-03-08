@@ -28,6 +28,7 @@
 package org.jraf.notiontobookmark.main
 
 import com.petersamokhin.notionapi.Notion
+import com.petersamokhin.notionapi.model.NotionResponse
 import com.petersamokhin.notionapi.utils.dashifyId
 import io.ktor.application.call
 import io.ktor.application.install
@@ -92,8 +93,7 @@ private suspend fun getAllSubPages(notion: Notion, pageId: String, depth: Int = 
     if (depth > 6) return emptyList()
     val res = mutableListOf<Page>()
     val dashPageId = pageId.dashifyId()
-    LOGGER.debug("Load page $dashPageId")
-    val page = notion.loadPage(dashPageId)
+    val page = loadNotionPage(notion, dashPageId) ?: return emptyList()
     val blocks = page.recordMap.blocksMap.values
         .map { it.value }
         .filter { it.type == "page" }
@@ -108,6 +108,18 @@ private suspend fun getAllSubPages(notion: Notion, pageId: String, depth: Int = 
         )
     }
     return res
+}
+
+private suspend fun loadNotionPage(notion: Notion, dashPageId: String): NotionResponse? {
+    var retries = 5
+    var page: NotionResponse
+    do {
+        LOGGER.debug("Load page $dashPageId")
+        page = notion.loadPage(dashPageId)
+        retries--
+    } while (page.recordMap.blocksMap == null && retries >= 0)
+    if (page.recordMap.blocksMap == null) return null
+    return page
 }
 
 private fun List<Page>.asJsonBookmarks(): String {

@@ -42,6 +42,7 @@ import io.ktor.routing.routing
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import org.json.JSONObject
+import org.slf4j.LoggerFactory
 
 private const val DEFAULT_PORT = 8042
 
@@ -51,6 +52,8 @@ private const val PATH_COOKIE = "cookie"
 private const val PATH_PAGE_ID = "pageId"
 
 private const val APP_URL = "https://notion-to-bookmarks.herokuapp.com"
+
+private val LOGGER = LoggerFactory.getLogger("org.jraf.notiontobookmark.main")
 
 suspend fun main() {
     val listenPort = System.getenv(ENV_PORT)?.toInt() ?: DEFAULT_PORT
@@ -89,6 +92,7 @@ private suspend fun getAllSubPages(notion: Notion, pageId: String, depth: Int = 
     if (depth > 6) return emptyList()
     val res = mutableListOf<Page>()
     val dashPageId = pageId.dashifyId()
+    LOGGER.debug("Load page $dashPageId")
     val page = notion.loadPage(dashPageId)
     val blocks = page.recordMap.blocksMap.values
         .map { it.value }

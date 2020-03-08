@@ -1,0 +1,1 @@
+web: build/install/notion-to-bookmarks/bin/notion-to-bookmarks

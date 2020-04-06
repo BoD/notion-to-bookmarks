@@ -30,7 +30,7 @@ which will show you a list of cookies for this website
 1. Find the one named `token_v2`, click on the arrow to expand, and copy the
 value of the **Content** field.  It should be a long string of digits and letters.
 
-![assets/chrome_settings.png](assets/chrome_settings.png)
+![assets/chrome_settings.png](https://github.com/BoD/notion-to-bookmarks/blob/master/assets/chrome_settings.png?raw=true)
 
 #### How to get your page id?
 The page id is the **last part** of the URL of the Notion page you're interested in.

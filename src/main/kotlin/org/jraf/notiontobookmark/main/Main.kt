@@ -37,6 +37,7 @@ import io.ktor.features.StatusPages
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.withCharset
+import io.ktor.response.respond
 import io.ktor.response.respondText
 import io.ktor.routing.get
 import io.ktor.routing.routing
@@ -54,6 +55,9 @@ private const val PATH_PAGE_ID = "pageId"
 
 private const val APP_URL = "https://notion-to-bookmarks.herokuapp.com"
 
+private const val MAX_ALLOWED_SIZE = 100
+
+
 private val LOGGER = LoggerFactory.getLogger("org.jraf.notiontobookmark.main")
 
 suspend fun main() {
@@ -64,9 +68,13 @@ suspend fun main() {
         install(StatusPages) {
             status(HttpStatusCode.NotFound) {
                 call.respondText(
-                    text = "Usage: $APP_URL/<Notion cookie value>/<page id>",
+                    text = "Usage: $APP_URL/<Notion cookie>/<page id>\n\nSee https://github.com/BoD/notion-to-bookmarks for more info.",
                     status = it
                 )
+            }
+
+            exception<StackOverflowError> {
+                call.respond(HttpStatusCode.PayloadTooLarge, "Requested page had too many sub pages, choose a less deep one")
             }
         }
 
@@ -89,8 +97,8 @@ data class Page(
     val pages: List<Page>
 )
 
-private suspend fun getAllSubPages(notion: Notion, pageId: String, depth: Int = 0): List<Page> {
-    if (depth > 6) return emptyList()
+private suspend fun getAllSubPages(notion: Notion, pageId: String, count: Int = 0): List<Page> {
+    var count = count
     val res = mutableListOf<Page>()
     val dashPageId = pageId.dashifyId()
     val page = loadNotionPage(notion, dashPageId) ?: return emptyList()
@@ -98,13 +106,16 @@ private suspend fun getAllSubPages(notion: Notion, pageId: String, depth: Int = 
         .map { it.value }
         .filter { it.type == "page" }
     for (block in blocks) {
+        count++
+        if (count > MAX_ALLOWED_SIZE) throw StackOverflowError()
+
         // Ignore parents, but keep this page itself
         val isSelf = block.id == dashPageId
         if (block.parentId != dashPageId && !isSelf) continue
         res += Page(
             id = block.id,
             title = block.properties["title"]?.get(0)?.get(0) as? String ?: "",
-            pages = if (isSelf) emptyList() else getAllSubPages(notion, block.id, depth + 1)
+            pages = if (isSelf) emptyList() else getAllSubPages(notion, block.id, count)
         )
     }
     return res

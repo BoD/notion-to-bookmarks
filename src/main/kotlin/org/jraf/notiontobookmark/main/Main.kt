@@ -43,8 +43,13 @@ import io.ktor.routing.get
 import io.ktor.routing.routing
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 import org.slf4j.LoggerFactory
+import java.util.concurrent.TimeUnit
 
 private const val DEFAULT_PORT = 8042
 
@@ -56,6 +61,8 @@ private const val PATH_PAGE_ID = "pageId"
 private const val APP_URL = "https://notion-to-bookmarks.herokuapp.com"
 
 private const val MAX_ALLOWED_SIZE = 100
+
+private const val NB_RETRIES = 5
 
 
 private val LOGGER = LoggerFactory.getLogger("org.jraf.notiontobookmark.main")
@@ -74,7 +81,10 @@ suspend fun main() {
             }
 
             exception<StackOverflowError> {
-                call.respond(HttpStatusCode.PayloadTooLarge, "Requested page had too many sub pages, choose a less deep one")
+                call.respond(
+                    HttpStatusCode.PayloadTooLarge,
+                    "Requested page had too many sub pages, choose a less deep one"
+                )
             }
         }
 
@@ -105,27 +115,33 @@ private suspend fun getAllSubPages(notion: Notion, pageId: String, count: Int = 
     val blocks = page.recordMap.blocksMap.values
         .map { it.value }
         .filter { it.type == "page" }
+    val jobs = mutableListOf<Deferred<Unit>>()
     for (block in blocks) {
-        count++
-        if (count > MAX_ALLOWED_SIZE) throw StackOverflowError()
+        jobs += GlobalScope.async {
+            count++
+            if (count > MAX_ALLOWED_SIZE) throw StackOverflowError()
 
-        // Ignore parents, but keep this page itself
-        val isSelf = block.id == dashPageId
-        if (block.parentId != dashPageId && !isSelf) continue
-        res += Page(
-            id = block.id,
-            title = block.properties["title"]?.get(0)?.get(0) as? String ?: "",
-            pages = if (isSelf) emptyList() else getAllSubPages(notion, block.id, count)
-        )
+            // Ignore parents, but keep this page itself
+            val isSelf = block.id == dashPageId
+            if (block.parentId != dashPageId && !isSelf) return@async
+            res += Page(
+                id = block.id,
+                title = block.properties["title"]?.get(0)?.get(0) as? String ?: "",
+                pages = if (isSelf) emptyList() else getAllSubPages(notion, block.id, count)
+            )
+        }
     }
+    for (job in jobs) job.await()
     return res
 }
 
 private suspend fun loadNotionPage(notion: Notion, dashPageId: String): NotionResponse? {
-    var retries = 5
+    var retries = NB_RETRIES
     var page: NotionResponse
     do {
-        LOGGER.debug("Load page $dashPageId")
+        val retry = NB_RETRIES - retries
+        delay(TimeUnit.SECONDS.toMillis(retry.toLong()))
+        LOGGER.debug("Load page $dashPageId${if (retry > 0) " Retry $retry" else ""}")
         page = notion.loadPage(dashPageId)
         retries--
     } while (page.recordMap.blocksMap == null && retries >= 0)

@@ -24,6 +24,7 @@ val versions = mapOf(
     "klibappstorerating" to "1.1.0",
     "logback" to "1.2.3",
     "kotlinxHtml" to "0.7.1",
+//    "kNotionApi" to "1.0.0",
     "kNotionApi" to "0.0.3",
     "json" to "20190722"
 )
@@ -73,6 +74,7 @@ dependencies {
 
     // KNotion API
     implementation("com.github.petersamokhin:knotion-api:${versions["kNotionApi"]}")
+//    implementation("com.petersamokhin:notionapi:${versions["kNotionApi"]}")
 
     // JSON
     implementation("org.json:json:${versions["json"]}")

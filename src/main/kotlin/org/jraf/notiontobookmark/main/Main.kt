@@ -126,7 +126,7 @@ private suspend fun getAllSubPages(notion: Notion, pageId: String, count: Int = 
             if (block.parentId != dashPageId && !isSelf) return@async
             res += Page(
                 id = block.id,
-                title = block.properties["title"]?.get(0)?.get(0) as? String ?: "",
+                title = block.properties?.get("title")?.get(0)?.get(0) as? String ?: "(Untitled)",
                 pages = if (isSelf) emptyList() else getAllSubPages(notion, block.id, count)
             )
         }

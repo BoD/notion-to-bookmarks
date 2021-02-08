@@ -49,6 +49,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 import org.slf4j.LoggerFactory
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 private const val DEFAULT_PORT = 8042
@@ -93,7 +94,7 @@ suspend fun main() {
                 val cookie = call.parameters[PATH_COOKIE]!!
                 val pageId = call.parameters[PATH_PAGE_ID]!!
                 val notion = Notion(cookie)
-                val jsonBookmarks = getAllSubPages(notion, pageId).asJsonBookmarks()
+                val jsonBookmarks = getAllSubPages(notion, pageId).sorted().asJsonBookmarks()
                 val jsonBookmarksWithEnvelope = """{"version": 1, ${jsonBookmarks}}"""
                 call.respondText(jsonBookmarksWithEnvelope, ContentType.Application.Json.withCharset(Charsets.UTF_8))
             }
@@ -137,16 +138,31 @@ private suspend fun getAllSubPages(notion: Notion, pageId: String, count: Int = 
 
 private suspend fun loadNotionPage(notion: Notion, dashPageId: String): NotionResponse? {
     var retries = NB_RETRIES
-    var page: NotionResponse
+    var page: NotionResponse?
     do {
         val retry = NB_RETRIES - retries
         delay(TimeUnit.SECONDS.toMillis(retry.toLong()))
         LOGGER.debug("Load page $dashPageId${if (retry > 0) " Retry $retry" else ""}")
-        page = notion.loadPage(dashPageId)
+        page = try {
+            notion.loadPage(dashPageId)
+        } catch (e: Exception) {
+            LOGGER.debug("Load page didn't work", e)
+            null
+        }
         retries--
-    } while (page.recordMap.blocksMap == null && retries >= 0)
-    if (page.recordMap.blocksMap == null) return null
+    } while (page?.recordMap?.blocksMap == null && retries >= 0)
+    if (page?.recordMap?.blocksMap == null) return null
     return page
+}
+
+private fun List<Page>.sorted(): List<Page> {
+    return sortedBy { page ->
+        if (page.pages.isEmpty() || page.pages.size == 1) {
+            "000" + page.title.toLowerCase(Locale.ROOT)
+        } else {
+            page.title.toLowerCase(Locale.ROOT)
+        }
+    }
 }
 
 private fun List<Page>.asJsonBookmarks(): String {
@@ -165,7 +181,7 @@ private fun List<Page>.asJsonBookmarks(): String {
             """
                     {
                         "title": ${JSONObject.quote(page.title)},
-                        ${page.pages.asJsonBookmarks()}
+                        ${page.pages.sorted().asJsonBookmarks()}
                     }${if (i == this.lastIndex) "" else ","}
                 """.trimIndent()
         }

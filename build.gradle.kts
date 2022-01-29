@@ -13,7 +13,7 @@ repositories {
     mavenLocal()
     jcenter()
     mavenCentral()
-    maven("https://dl.bintray.com/bod/JRAF")
+//    maven("https://dl.bintray.com/bod/JRAF")
     maven("https://jitpack.io")
 }
 
@@ -78,5 +78,6 @@ dependencies {
 
     // JSON
     implementation("org.json:json:${versions["json"]}")
-
 }
+
+// Run `./gradlew distZip` to create a zip distribution

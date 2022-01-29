@@ -4,18 +4,16 @@ This little webapp will generate a JSON bookmarks document from a Notion page.
 
 This is intended to be used with [bbt](https://github.com/BoD/bbt).
 
-An instance is running here: https://notion-to-bookmarks.herokuapp.com/
-
 ## How to use
 
 ### TL;DR
-https://<span></span>notion-to-bookmarks.herokuapp.com/`NOTION_COOKIE`/`PAGE_ID`
+https://<span></span>server/`NOTION_COOKIE`/`PAGE_ID`
 
 ### In more words
 
 You need to craft a URL of this form:
 
-https://<span></span>notion-to-bookmarks.herokuapp.com/`NOTION_COOKIE`/`PAGE_ID`
+https://<span></span>server/`NOTION_COOKIE`/`PAGE_ID`
 
 where:
 
@@ -24,13 +22,10 @@ identify you and allow accessing the Notion API.
 - `PAGE_ID` is the id of the page that you want to turn into bookmarks
 
 #### How to get your Notion cookie?
-1. Go to https://www.notion.so with Chrome and make sure you're logged in
-1. Go to [chrome://settings/cookies/detail?site=www.notion.so](chrome://settings/cookies/detail?site=www.notion.so), 
-which will show you a list of cookies for this website
-1. Find the one named `token_v2`, click on the arrow to expand, and copy the
-value of the **Content** field.  It should be a long string of digits and letters.
 
-![assets/chrome_settings.png](https://github.com/BoD/notion-to-bookmarks/blob/master/assets/chrome_settings.png?raw=true)
+1. Go to https://www.notion.so with Chrome and make sure you're logged in
+2. Find the value of the cookie named `token_v2`, by following the
+   instructions [here](https://developer.chrome.com/docs/devtools/storage/cookies/).
 
 #### How to get your page id?
 The page id is the **last part** of the URL of the Notion page you're interested in.

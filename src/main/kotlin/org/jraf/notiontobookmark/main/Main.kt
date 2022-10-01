@@ -24,6 +24,7 @@
  */
 
 @file:Suppress("EXPERIMENTAL_API_USAGE")
+@file:OptIn(KtorExperimentalAPI::class)
 
 package org.jraf.notiontobookmark.main
 
@@ -43,23 +44,27 @@ import io.ktor.routing.get
 import io.ktor.routing.routing
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
+import io.ktor.util.KtorExperimentalAPI
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import org.json.JSONObject
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-private const val DEFAULT_PORT = 8042
+private const val DEFAULT_PORT = 8080
 
 private const val ENV_PORT = "PORT"
 
 private const val PATH_COOKIE = "cookie"
 private const val PATH_PAGE_ID = "pageId"
-
-private const val APP_URL = "https://notion-to-bookmarks.herokuapp.com"
 
 private const val MAX_ALLOWED_SIZE = 100
 
@@ -67,6 +72,8 @@ private const val NB_RETRIES = 5
 
 
 private val LOGGER = LoggerFactory.getLogger("org.jraf.notiontobookmark.main")
+
+private val json = Json { prettyPrint = true }
 
 suspend fun main() {
     val listenPort = System.getenv(ENV_PORT)?.toInt() ?: DEFAULT_PORT
@@ -76,7 +83,7 @@ suspend fun main() {
         install(StatusPages) {
             status(HttpStatusCode.NotFound) {
                 call.respondText(
-                    text = "Usage: $APP_URL/<Notion cookie>/<page id>\n\nSee https://github.com/BoD/notion-to-bookmarks for more info.",
+                    text = "Usage: ${call.request.local.scheme}://${call.request.local.host}:${call.request.local.port}/<Notion cookie>/<page id>\n\nSee https://github.com/BoD/notion-to-bookmarks for more info.",
                     status = it
                 )
             }
@@ -95,8 +102,7 @@ suspend fun main() {
                 val pageId = call.parameters[PATH_PAGE_ID]!!
                 val notion = Notion(cookie)
                 val jsonBookmarks = getAllSubPages(notion, pageId).sorted().asJsonBookmarks()
-                val jsonBookmarksWithEnvelope = """{"version": 1, ${jsonBookmarks}}"""
-                call.respondText(jsonBookmarksWithEnvelope, ContentType.Application.Json.withCharset(Charsets.UTF_8))
+                call.respondText(jsonBookmarks, ContentType.Application.Json.withCharset(Charsets.UTF_8))
             }
         }
     }.start(wait = true)
@@ -105,11 +111,11 @@ suspend fun main() {
 data class Page(
     val id: String,
     val title: String,
-    val pages: List<Page>
+    val pages: List<Page>,
 )
 
 private suspend fun getAllSubPages(notion: Notion, pageId: String, count: Int = 0): List<Page> {
-    var count = count
+    var c = count
     val res = mutableListOf<Page>()
     val dashPageId = pageId.dashifyId()
     val page = loadNotionPage(notion, dashPageId) ?: return emptyList()
@@ -119,8 +125,8 @@ private suspend fun getAllSubPages(notion: Notion, pageId: String, count: Int = 
     val jobs = mutableListOf<Deferred<Unit>>()
     for (block in blocks) {
         jobs += GlobalScope.async {
-            count++
-            if (count > MAX_ALLOWED_SIZE) throw StackOverflowError()
+            c++
+            if (c > MAX_ALLOWED_SIZE) throw StackOverflowError()
 
             // Ignore parents, but keep this page itself
             val isSelf = block.id == dashPageId
@@ -128,7 +134,7 @@ private suspend fun getAllSubPages(notion: Notion, pageId: String, count: Int = 
             res += Page(
                 id = block.id,
                 title = block.properties?.get("title")?.get(0)?.get(0) as? String ?: "(Untitled)",
-                pages = if (isSelf) emptyList() else getAllSubPages(notion, block.id, count)
+                pages = if (isSelf) emptyList() else getAllSubPages(notion, block.id, c)
             )
         }
     }
@@ -158,36 +164,37 @@ private suspend fun loadNotionPage(notion: Notion, dashPageId: String): NotionRe
 private fun List<Page>.sorted(): List<Page> {
     return sortedBy { page ->
         if (page.pages.isEmpty() || page.pages.size == 1) {
-            "000" + page.title.toLowerCase(Locale.ROOT)
+            "000" + page.title.lowercase(Locale.ROOT)
         } else {
-            page.title.toLowerCase(Locale.ROOT)
+            page.title.lowercase(Locale.ROOT)
         }
     }
 }
 
 private fun List<Page>.asJsonBookmarks(): String {
-    var res = """
-        "bookmarks": [
-    """.trimIndent()
-    for ((i, page) in this.withIndex()) {
-        res += if (page.pages.isEmpty() || page.pages.size == 1) {
-            """
-                    {
-                        "title": ${JSONObject.quote(page.title)},
-                        "url": "https://notion.so/${page.id.removeDashes()}"
-                    }${if (i == this.lastIndex) "" else ","}
-                """.trimIndent()
-        } else {
-            """
-                    {
-                        "title": ${JSONObject.quote(page.title)},
-                        ${page.pages.sorted().asJsonBookmarks()}
-                    }${if (i == this.lastIndex) "" else ","}
-                """.trimIndent()
+    val jsonObject = buildJsonObject {
+        put("version", 1)
+        put("bookmarks", asJsonBookmarksArray())
+    }
+    return json.encodeToString(jsonObject)
+}
+
+private fun List<Page>.asJsonBookmarksArray(): JsonArray {
+    return buildJsonArray {
+        for (page in this@asJsonBookmarksArray) {
+            add(
+                buildJsonObject {
+                    put("title", page.title)
+                    if (page.pages.isEmpty() || page.pages.size == 1) {
+                        put("url", "https://notion.so/${page.id.removeDashes()}")
+                    } else {
+                        put("bookmarks", page.pages.sorted().asJsonBookmarksArray())
+                    }
+                }
+            )
         }
     }
-    res += "]"
-    return res
 }
+
 
 private fun String.removeDashes() = filterNot { it == '-' }
